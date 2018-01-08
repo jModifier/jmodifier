@@ -88,14 +88,24 @@ const jModifier = (function(a, b){
 		"dom": {
 			query: function(a, b, forceArray){
 				if(b){
-					let from = jModifier.dom.query(a, null, true), collection = [];
-					for(let i = 0, length = from ? from.length : undefined; i < length; i++){
-						let element = from[i].querySelectorAll(b);
-						for(let s = 0, eLength = element.length; s < eLength; s++){
-							collection.push(element[s]);
+					let parent = jModifier.dom.query(a, null, true);
+					if(b.constructor === Object){
+						let keys = Object.keys(b);
+						jModifier.for(keys, function(key, index){
+							let elements = jModifier.dom.query(parent, b[key]);
+							b[key] = elements.length > 1 ? elements : elements[0];
+						});
+						return b;
+					}else{
+						let collection = [];
+						for(let i = 0, length = parent ? parent.length : undefined; i < length; i++){
+							let element = parent[i].querySelectorAll(b);
+							for(let s = 0, eLength = element.length; s < eLength; s++){
+								collection.push(element[s]);
+							}
 						}
+						return collection;
 					}
-					return collection;
 				}else{
 					let elements = [];
 					jModifier.for(jModifier.array.wrap(a), function(item){
@@ -108,12 +118,6 @@ const jModifier = (function(a, b){
 					if(!result && jModifier.log) console.info("jModifier: Query ran with no results: ", a, b);
 					return result;
 				}
-			},
-			queryObj: function(parent, obj){
-				parent = jModifier.dom.query(parent);
-				let keys = Object.keys(obj);
-				jModifier.for(keys, function(key, index){obj[key] = jModifier.dom.query(parent, obj[key])[0]});
-				return obj;
 			},
 			on: function(trgt, func, ucap){
 				let events = jModifier.function.getArguments(func);
@@ -280,13 +284,13 @@ const jModifier = (function(a, b){
 			wrap: function(trgt, Type){
 				if(trgt) return jModifier.array.listy[trgt.constructor.name] ? trgt : new Array(typeof trgt === "number" ? trgt.toString() : trgt);
 			},
-			listy: {Array, Int8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array, NodeList},
 			getIndex: function(arr, trgt){
 				let length = arr.length;
 				for(let i = 0; i < length; i++){
 					if(arr[i] === trgt) return i;
 				}
-			}
+			},
+			listy: {Array, Int8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array, NodeList}
 		},
 		"function": {
 			argumentEvaluator: function(table, func){
@@ -315,6 +319,6 @@ const jModifier = (function(a, b){
 			aa: "array.assign",
 			for: "for"
 		},
-		log: true
+		log: false
 	};
 })();
