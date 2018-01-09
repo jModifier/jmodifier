@@ -125,7 +125,6 @@ const jModifier = (function(a, b){
 						});
 					});
 					let result = !forceArray ? elements.length > 1 ? elements : elements[0] : elements;
-					if(!result && jModifier.log) console.info("jModifier: Query ran with no results: ", a, b);
 					return result;
 				}
 			},
@@ -318,7 +317,6 @@ const jModifier = (function(a, b){
 				let funcStr = JSON.stringify("" + func), open = funcStr.indexOf("("), close = funcStr.indexOf(")"), refined = funcStr.substring(open + 1, close).replace(/\s/g, "").split(",");
 				return refined;
 			}
-		},
-		log: false
+		}
 	};
 })();
