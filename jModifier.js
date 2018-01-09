@@ -39,6 +39,16 @@ const jModifier = (function(a, b){
 			}
 			return obj;
 		},
+		"alts": {
+			q: "dom.query",
+			on: "dom.on",
+			d: "dom",
+			o: "object",
+			oa: "object.assign",
+			a: "array",
+			aa: "array.assign",
+			for: "for"
+		},
 		"for": function(arr, cb, opts){
 			if(arr){
 				if(arr.constructor === Number) arr = jModifier.array.fill(new Array(arr));
@@ -104,7 +114,7 @@ const jModifier = (function(a, b){
 								collection.push(element[s]);
 							}
 						}
-						return collection;
+						return forceArray ? collection : collection.length > 1 ? collection : collection[0];
 					}
 				}else{
 					let elements = [];
@@ -135,7 +145,7 @@ const jModifier = (function(a, b){
 				});
 			},
 			create: function(stru){
-				stru = stru.constructor === Array ? stru : jModifier.string.toElementArray(stru);
+				stru = stru.constructor === Array ? stru : jModifier.string.toNestedArray(stru);
 				let elements = jModifier.dom.createElements(stru);
 				return elements.length > 1 ? elements : elements[0];
 			},
@@ -171,7 +181,7 @@ const jModifier = (function(a, b){
 			}
 		},
 		"string": {
-			toElementArray: function(str){
+			toNestedArray: function(str){
 				str = str.constructor === RegExp ? str.source : str;
 				str = str.replace(/\s/g, "");
 				let seperate = function(node){
@@ -281,7 +291,7 @@ const jModifier = (function(a, b){
 			fill: function(arr, content){
 				return arr.fill(undefined).map(function(a, b){return content || b});
 			},
-			wrap: function(trgt, Type){
+			wrap: function(trgt){
 				if(trgt) return jModifier.array.listy[trgt.constructor.name] ? trgt : new Array(typeof trgt === "number" ? trgt.toString() : trgt);
 			},
 			getIndex: function(arr, trgt){
@@ -308,16 +318,6 @@ const jModifier = (function(a, b){
 				let funcStr = JSON.stringify("" + func), open = funcStr.indexOf("("), close = funcStr.indexOf(")"), refined = funcStr.substring(open + 1, close).replace(/\s/g, "").split(",");
 				return refined;
 			}
-		},
-		"alts": {
-			q: "dom.query",
-			on: "dom.on",
-			d: "dom",
-			o: "object",
-			oa: "object.assign",
-			a: "array",
-			aa: "array.assign",
-			for: "for"
 		},
 		log: false
 	};
