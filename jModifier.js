@@ -189,7 +189,7 @@ const jModifier = (function(a, b){
 					return children ? [tag, children] : [tag];
 				},
 				recursive = function(str){
-					let ns = jModifier.string.splitFromXOutsideY(str, ",", "[]"), nodes = [];
+					let ns = jModifier.string.splitFromXOutsideY(str, ",", "[]", true), nodes = [];
 					for(let i = 0, nsl = ns.length; i < nsl; i++){
 						let sep = seperate(ns[i]), children = sep[1];
 						if(children){
@@ -201,8 +201,8 @@ const jModifier = (function(a, b){
 				};
 				return recursive(str);
 			},
-			splitFromXOutsideY: function(str, X, Y){
-				str = str.replace(/\s/g, "");
+			splitFromXOutsideY: function(str, X, Y, removeWhitespace){
+				if(removeWhitespace) str = str.replace(/\s/g, "");
 				let commas = [], nestPos = 0, split = [];
 				for(let i = 0, sLength = str.length; i < sLength; i++){
 					nestPos += str[i] === Y[0] ? 1 : str[i] === Y[1] ? -1 : 0;
