@@ -306,9 +306,9 @@ const jModifier = (function(a, b){
 				return function(){
 					let length = arguments.length, result = "";
 					for(let i = 0; i < length; i++){
-						let arg = arguments[i];
-						if(i != length - 1) arg += ":";
-						result += func ? func(arg) || arg : arg;
+						let arg = arguments[i], argReturn = func ? func(arg) : arg;
+						if(i != length - 1) argReturn += ":";
+						result += argReturn;
 					}
 					let target = table[result] || table.else;
 					if(target) return target.apply(null, arguments);
