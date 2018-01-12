@@ -75,6 +75,8 @@ Installing
 2. Reference the library with a script tag:
 `<script type="text/javascript" src="/path/to/jModifier.js">`
 
+Note: There is also an experimental version of jModifier under the `/dev` directory.
+
 </br>
 
 Table of Contents
