@@ -7,7 +7,7 @@
 
 	The MIT License (MIT)
 
-	Copyright © 2017 Jeremy Parmenter
+	Copyright ÂŠ 2017 Jeremy Parmenter
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -103,7 +103,7 @@ const jModifier = (function(a, b){
 						let keys = Object.keys(b);
 						jModifier.for(keys, function(key, index){
 							let elements = jModifier.dom.query(parent, b[key]);
-							b[key] = elements.length > 1 ? elements : elements[0];
+							b[key] = elements.length ? elements.length > 1 ? elements : elements[0] : elements;
 						});
 						return b;
 					}else{
