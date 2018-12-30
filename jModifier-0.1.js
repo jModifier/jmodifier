@@ -31,7 +31,7 @@
 
 const jModifier = (function(a, b){
 	return {
-		"getAlts": function(obj){
+		"getAlts": (obj) => {
 			if(!obj) obj = jModifier.alts;
 			for(let i = 0, keys = Object.keys(obj); i < keys.length; i++){
 				let key = keys[i];
@@ -265,15 +265,10 @@ const jModifier = (function(a, b){
 				}, opts);
 				return array;
 			},
-			reverse: function(arr){
-				let length = arr.length, newArr = [];
-				for(let i = length - 1; i > -1; i--){
-					newArr.push(arr[i]);
-				}
-				return newArr;
+			reverse: (arr) => arr.reverse()
 			},
 			shuffle: function(arr){
-				let a = [].concat(arr), length = a.length, shuffled = [];
+				let a = ...arr, length = a.length, shuffled = [];
 				for(let i = 0; i < length; i++){
 					let rand = Math.floor(Math.random() * a.length);
 					shuffled.push(a[rand]);
@@ -287,15 +282,12 @@ const jModifier = (function(a, b){
 					return a + b
 				});
 			},
-			fill: function(arr, content){
-				return arr.fill(undefined).map(function(a, b){return content || b});
-			},
-			wrap: function(trgt){
+			fill: (arr, content) => arr.fill(undefined).map(function(a, b){return content || b}),
+			wrap: (trgt) => {
 				if(trgt) return jModifier.array.listy[trgt.constructor.name] ? trgt : new Array(typeof trgt === "number" ? trgt.toString() : trgt);
 			},
-			getIndex: function(arr, trgt){
-				let length = arr.length;
-				for(let i = 0; i < length; i++){
+			getIndex: (arr, trgt) => {
+				for(let i = 0; i < arr.length; i++){
 					if(arr[i] === trgt) return i;
 				}
 			},
