@@ -1,0 +1,1 @@
+var jModifier = "jModifier 1.0 is in development";
