@@ -1,0 +1,1 @@
+!function(o){var n={ping:function(){return"Pong!"}};!!!!!!!!!!!!!!!!!!!!!!!(typeof exports==="object")?window.jModifier=n:module.exports=n}();
