@@ -1,6 +1,6 @@
 (function(client) {
   var j = {
-    ping: function() {
+    ping() {
       return arguments.length === 0 ? "jModifier.ping() - a dummy function" : (
         ({
           ping: () => "Pong!"

@@ -105,7 +105,7 @@ const jm = {
   },
   isShortMethod(method){
     let methodStr = method.constructor === String ? method : method.toString();
-    return methodStr.match(/^[^\/function]\w+\s*\(/g) !== null;
+    return methodStr.match(/^[^\/function]?\w+\s*\(/g) !== null;
   },
   renameMethod(method, newName){
     let methodStr = method.constructor === String ? method : method.toString();
@@ -148,7 +148,7 @@ const jm = {
         let isShortMethod = jm.isShortMethod(targetMethod);
         if(isShortMethod) targetMethod = jm.renameMethod(targetMethod, key);
         targetMethod = targetMethod.constructor === String ? targetMethod : targetMethod.toString();
-        return `convert:function(){
+        return `convert:${key}(){
           return arguments.length === 0 ? "${method.label} - ${method.description}" : (
             ({${
               isShortMethod ? targetMethod : `${key}: ${targetMethod}`
