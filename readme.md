@@ -33,7 +33,7 @@ const jModifier = require("jmodifier").mint;
 [Click here to find the old (unstable) jModifier](https://gist.github.com/JeremyJaydan/cd1473ff97cb653c219d3cc17de389e2)
 
 ## Contributing
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io#https://github.com/JeremyJaydan/jModifier)
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io#https://github.com/jmodifier/jModifier)
 
 - Clone the repository (or open in GitPod)
 - Then check out [contributing.md](contributing.md)
