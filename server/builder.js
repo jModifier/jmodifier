@@ -1,33 +1,14 @@
 
-const express = require("express");
-const fs = require("fs");
 const path = require("path");
-const chokidar = require("chokidar");
+const fs = require("fs");
+const shell = require("shelljs");
+
 const beautify = require("js-beautify");
 const buble = require("buble");
 const terser = require("terser");
 
-const server = express();
-server.use(express.static(path.resolve(__dirname + "/../builds")));
 
-function Timeline(timelineLabel){
-	this.times = [];
-	this.maxChars = 0;
-	this.label = timelineLabel;
-	this.add = function(label){
-		let times = this.times;
-		times.push({ label, hrtime: process.hrtime(), elapsed: times.length === 0 ? [0, 0] : process.hrtime(times[times.length - 1].hrtime) });
-		if(this.maxChars < label.length) this.maxChars = label.length;
-		return this;
-	};
-	this.log = function(){
-		console.log("\x1b[36m%s\x1b[0m", "\n[ "+ this.label +" ]\n" + this.times.map(time => "  " + time.label + (" ".repeat((this.maxChars - time.label.length) + 2)) + (time.elapsed[1] / 1000000) + "ms").join("\n"), "\n");
-		return this;
-	};
-}
-
-const jm = {
-  dir: `${__dirname}/jModifier`,
+const builder = {
   bundle(rootDir){
     let jModifier = {};
     this.methodsBundled = 0;
@@ -47,10 +28,10 @@ const jm = {
     ;
     return jModifier;
   },
-  fetchMethods(path){
-    return fs.readdirSync(path)
+  fetchMethods(methodsPath){
+    return fs.readdirSync(methodsPath)
       .map(item => {
-        return fs.lstatSync(`${path}/${item}`).isDirectory() ? {dir: item} : {file: item}
+        return fs.lstatSync(`${methodsPath}/${item}`).isDirectory() ? {dir: item} : {file: item}
       })
     ;
   },
@@ -100,7 +81,7 @@ const jm = {
       let invalid = invalids[0];
       invalids.shift();
       let stringValue = invalid.value.toString();
-      return jm.isShortMethod(stringValue) ? stringValue : `${invalid.key}: ${stringValue}`;
+      return builder.isShortMethod(stringValue) ? stringValue : `${invalid.key}: ${stringValue}`;
     });
   },
   isShortMethod(method){
@@ -120,7 +101,7 @@ const jm = {
         if(bundleMethod.method){
           newBundle[method] = replacer(method, bundleMethod);
         }else if(bundleMethod.constructor === Object){
-          newBundle[method] = jm.mapMethods(bundleMethod, replacer);
+          newBundle[method] = builder.mapMethods(bundleMethod, replacer);
         }
       }else{
         newBundle[method] = bundleMethod;
@@ -128,25 +109,25 @@ const jm = {
     }
     return newBundle;
   },
-  build: {
+  builds: {
     index(bundle){
-      return jm.package(bundle, {b: true});
+      return builder.package(bundle, {b: true}, "index");
     },
     core(bundle, mint){
-      let mappedBundle = jm.mapMethods(bundle, (key, method) => {
+      let mappedBundle = builder.mapMethods(bundle, (key, method) => {
         let targetMethod = method.method;
-        if(jm.isShortMethod(targetMethod)){
-          targetMethod = `convert:${jm.renameMethod(targetMethod, key)}`
+        if(builder.isShortMethod(targetMethod)){
+          targetMethod = `convert:${builder.renameMethod(targetMethod, key)}`
         }
         return targetMethod;
       });
-      return mint ? mappedBundle : jm.package(mappedBundle, {b: true});
+      return mint ? mappedBundle : builder.package(mappedBundle, {b: true}, "core");
     },
     debug(bundle){
-      let mappedBundle = jm.mapMethods(bundle, (key, method) => {
+      let mappedBundle = builder.mapMethods(bundle, (key, method) => {
         let targetMethod = method.method;
-        let isShortMethod = jm.isShortMethod(targetMethod);
-        if(isShortMethod) targetMethod = jm.renameMethod(targetMethod, key);
+        let isShortMethod = builder.isShortMethod(targetMethod);
+        if(isShortMethod) targetMethod = builder.renameMethod(targetMethod, key);
         targetMethod = targetMethod.constructor === String ? targetMethod : targetMethod.toString();
         return `convert:${key}(){
           return arguments.length === 0 ? "${method.label} - ${method.description}" : (
@@ -156,31 +137,29 @@ const jm = {
           )
         }`;
       });
-      return jm.package(mappedBundle, {b: true});
+      return builder.package(mappedBundle, {b: true}, "debug");
     },
     mint(bundle){
-      return jm.package(jm.build.core(bundle, true), {t: true, m: true});
+      return builder.package(builder.builds.core(bundle, true), {t: true, m: true}, "mint");
     }
   },
-  package(bundle, {b, t, m}){
-    let stringified = jm.stringifyObject(bundle);
-    let package = `
-      (function(client){
-        var j = ${stringified};
-        client ? window.jModifier = j : module.exports = j;
-      })(!!!!!!!!!!!/* jModifier */!!!!!!!!!!!!(typeof exports === "object"));
-    `;
-    if(t) package = buble.transform(package).code;
-    if(b) package = beautify(package, {indent_size: 2});
-    if(m) package = terser.minify(package).code;
-    return package;
+  buildAll(sourcePath, buildPath){
+    let timeline = new builder.Timeline("jModifier Server").add("Bundling..");
+    let paths = {
+      source: path.normalize(`${__dirname}/${sourcePath}`),
+      build: path.normalize(`${__dirname}/${buildPath}`)
+    };
+    let bundle = builder.bundle(paths.source);
+    timeline.add(`${builder.methodsBundled} method${builder.methodsBundled > 1 ? "s" : ""} bundled`).add("Building files..");
+    builder.writeBuilds(path.normalize(`${__dirname}/${buildPath}`), bundle);
+    timeline.add("Build complete").log();
   },
   writeBuilds(dir, bundle){
-    if(!fs.existsSync(dir)) fs.mkdirSync(dir);
-    let buildKeys = Object.keys(jm.build);
+    if(!fs.existsSync(dir)) shell.mkdir("-p", dir);
+    let buildKeys = Object.keys(builder.builds);
     let buildFiles = [];
     buildKeys.forEach(buildKey => {
-      let build = jm.build[buildKey];
+      let build = builder.builds[buildKey];
       let buildFileName = `./jModifier-${buildKey}.js`;
       buildFiles.push({filename: buildFileName, key: buildKey});
       fs.writeFile(dir + "/" + buildFileName, build(bundle), err => {
@@ -198,39 +177,34 @@ const jm = {
     `, {indent_size: 2}), err => {
       if(err) console.error("\x1b[33m%s\x1b[0m", `jModifier: error creating _.js build file \n\n${err.stack}\n`);
     });
+  },
+  package(bundle, {b, t, m}, buildName){
+    let stringified = builder.stringifyObject(bundle);
+    let package = `
+      (function(client, ${buildName}){
+        client ? window.jModifier = ${buildName} : module.exports = ${buildName};
+      })(!!!!!!!!!!!/* jModifier */!!!!!!!!!!!!(typeof exports === "object"), ${stringified});
+    `;
+    if(t) package = buble.transform(package).code;
+    if(b) package = beautify(package, {indent_size: 2});
+    if(m) package = terser.minify(package).code;
+    return package;
+  },
+  Timeline: function(timelineLabel){
+    this.times = [];
+    this.maxChars = 0;
+    this.label = timelineLabel;
+    this.add = function(label){
+      let times = this.times;
+      times.push({ label, hrtime: process.hrtime(), elapsed: times.length === 0 ? [0, 0] : process.hrtime(times[times.length - 1].hrtime) });
+      if(this.maxChars < label.length) this.maxChars = label.length;
+      return this;
+    };
+    this.log = function(){
+      console.log("\x1b[36m%s\x1b[0m", "\n[ "+ this.label +" ]\n" + this.times.map(time => "  " + time.label + (" ".repeat((this.maxChars - time.label.length) + 2)) + (time.elapsed[1] / 1000000) + "ms").join("\n"), "\n");
+      return this;
+    };
   }
 };
 
-const buildPath = path.normalize(`${__dirname}/../builds`);
-function writeAllBuilds(){
-  let timeline = new Timeline("jModifier Server").add("Bundling..");
-  let bundle = jm.bundle(jm.dir);
-  timeline.add(`${jm.methodsBundled} method${jm.methodsBundled > 1 ? "s" : ""} bundled`).add("Building files..");
-  jm.writeBuilds(buildPath, bundle);
-  timeline.add("Build complete").log();
-}
-
-chokidar.watch(jm.dir)
-  .on("change", writeAllBuilds)
-  .on("unlink", writeAllBuilds)
-;
-
-let port = 5000;
-server.get("/", (req, res) => {
-  fs.readFile(`${__dirname}/dev.js`, "utf8", (err, publicScript) => {
-    if(!err){
-      res.send(
-        "<pre>jModifier dev server</pre>"
-        + "<script type='text/javascript' src='/jModifier-debug.js'></script>"
-        + `<script type='text/javascript'>${publicScript}</script>`
-      );
-    }else{
-      console.error(err);
-      res.send(err);
-    }
-  })
-}).listen(port, () => {
-  console.log(`\n\n jModifier development server running on port ${port}`);
-  writeAllBuilds();
-});
-
+module.exports = builder;
