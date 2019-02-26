@@ -144,7 +144,7 @@ const builder = {
     }
   },
   buildAll(sourcePath, buildPath){
-    let timeline = new builder.Timeline("jModifier Server").add("Bundling..");
+    let timeline = new builder.Timeline("jModifier Builder").add("Bundling..");
     let paths = {
       source: path.normalize(`${__dirname}/${sourcePath}`),
       build: path.normalize(`${__dirname}/${buildPath}`)
