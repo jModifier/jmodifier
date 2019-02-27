@@ -10,23 +10,34 @@ const terser = require("terser");
 
 const builder = {
   bundle(rootDir){
-    let jModifier = {};
-    this.methodsBundled = 0;
-    this.fetchMethods(rootDir)
-      .forEach(method => {
+    return new Promise((resolve, reject) => {
+      let jModifier = {};
+      this.methodsBundled = 0;
+      let methods = this.fetchMethods(rootDir);
+      let isLastMethod = i => i === methods.length - 1;
+      methods.forEach((method, index) => {
         if(method.dir){
           jModifier[method.dir] = {};
           this.fetchMethods(`${rootDir}/${method.dir}`).forEach(subMethod => {
             let methodName = this.resolveName(subMethod.file);
-            jModifier[method.dir][methodName] = this.readMethod(`${rootDir}/${method.dir}/${subMethod.file}`);
+            this.readMethod(`${rootDir}/${method.dir}/${subMethod.file}`)
+              .then(({method}) => {
+                jModifier[method.dir][methodName] = this.readMethod();
+                if(isLastMethod(index)) resolve(jModifier);
+              }).catch(reject)
+            ;
           });
         }else{
           let methodName = this.resolveName(method.file);
-          jModifier[methodName] = this.readMethod(`${rootDir}/${method.file}`);
+          this.readMethod(`${rootDir}/${method.file}`)
+            .then(({method}) => {
+              jModifier[methodName] = method;
+              if(isLastMethod(index)) resolve(jModifier);
+            }).catch(reject)
+          ;
         }
-      })
-    ;
-    return jModifier;
+      });
+    })
   },
   fetchMethods(methodsPath){
     return fs.readdirSync(methodsPath)
@@ -36,31 +47,49 @@ const builder = {
     ;
   },
   readMethod(path){
-    let method;
-    try{
-      delete require.cache[path];
-      method = this.resolveMethod(require(path));
-      this.methodsBundled++;
-    }catch(e){
-      console.error(
-        "\x1b[33m%s\x1b[0m",
-        `\njModifier: error bundling (${path}) method.. \n\n${e.stack}\n`
-      );
-    }
-    return method;
+    return new Promise((resolve, reject) => {
+      try{
+        delete require.cache[path];
+        this.resolveMethod(require(path), path)
+          .then(method => {
+            method = this.resolveMethod(require(path));
+            this.methodsBundled++;
+            resolve({method, stage: "readMethod"});
+          }).catch(reject)
+        ;
+      }catch(e){
+        let pathSplit = path.split("/");
+        let methodPath = pathSplit.slice(pathSplit.length - 2, pathSplit.length).join("/");
+
+        let stack = e.stack.toString();
+        let synIndex = stack.indexOf("SyntaxError:");
+        if(synIndex !== -1){
+          let firstLine = stack.split("\n")[0].split("/").slice(-2).join("/") + "\n\n";
+          let stackMessage = stack.split("\n").slice(1).join("\n").split(/\n.*at\s.*\(.*\)/)[0];
+          stack = firstLine + stackMessage;
+        }
+        let message = `\nfailed to bundle method..` + `\n\n${stack}\n`;
+        reject({message, stage: "readMethod"});
+      }
+    })
   },
   resolveName: fileName => fileName.split(".").slice(0, -1).join("."),
-  resolveMethod: method => {
-    if(
-      method.label
-      && method.description
-      && method.method
-      && method.example
-    ){
-      return method;
-    }else{
-      throw new Error(`jModifier method is not formatted correctly, make sure it includes a label, description, method, and example.`);
-    }
+  resolveMethod: (method, path) => {
+    return new Promise((resolve, reject) => {
+      if(
+        method.label
+        && method.description
+        && method.method
+        && method.example
+      ){
+        resolve(method);
+      }else{
+        reject({
+          stage: "resolveMethod",
+          message: `jModifier method '${path.split("/").slice(-2).join("/")}' is not formatted correctly. Method must include a 'label', 'description', 'method', and 'example'.`
+        });
+      }
+    });
   },
   stringifyObject(targetObject, hash){
     hash = hash ? hash : "jm_b759459e375ea54802284cca833e7bbd";
@@ -144,15 +173,18 @@ const builder = {
     }
   },
   buildAll(sourcePath, buildPath){
-    let timeline = new builder.Timeline("jModifier Builder").add("Bundling..");
-    let paths = {
-      source: path.normalize(`${__dirname}/${sourcePath}`),
-      build: path.normalize(`${__dirname}/${buildPath}`)
-    };
-    let bundle = builder.bundle(paths.source);
-    timeline.add(`${builder.methodsBundled} method${builder.methodsBundled > 1 ? "s" : ""} bundled`).add("Building files..");
-    builder.writeBuilds(path.normalize(`${__dirname}/${buildPath}`), bundle);
-    timeline.add("Build complete").log();
+    return new Promise((resolve, reject) => {
+      let timeline = new builder.Timeline("jModifier Server").add("Bundling..");
+      let paths = {
+        source: path.normalize(`${__dirname}/${sourcePath}`),
+        build: path.normalize(`${__dirname}/${buildPath}`)
+      };
+      builder.bundle(paths.source).then(bundle => {
+        timeline.add(`${builder.methodsBundled} method${builder.methodsBundled > 1 ? "s" : ""} bundled`).add("Building files..");
+        builder.writeBuilds(path.normalize(`${__dirname}/${buildPath}`), bundle);
+        resolve({stage: "build", message: timeline.add("Build complete").log()});
+      }).catch(err => reject(err));
+    });
   },
   writeBuilds(dir, bundle){
     if(!fs.existsSync(dir)) shell.mkdir("-p", dir);
@@ -200,9 +232,10 @@ const builder = {
       if(this.maxChars < label.length) this.maxChars = label.length;
       return this;
     };
-    this.log = function(){
-      console.log("\x1b[36m%s\x1b[0m", "\n[ "+ this.label +" ]\n" + this.times.map(time => "  " + time.label + (" ".repeat((this.maxChars - time.label.length) + 2)) + (time.elapsed[1] / 1000000) + "ms").join("\n"), "\n");
-      return this;
+    this.log = function(logToConsole){
+      let log = "\n[ "+ this.label +" ]\n" + this.times.map(time => "  " + time.label + (" ".repeat((this.maxChars - time.label.length) + 2)) + (time.elapsed[1] / 1000000) + "ms").join("\n") + "\n";
+      if(logToConsole) console.log("\x1b[36m%s\x1b[0m", log);
+      return log;
     };
   }
 };
