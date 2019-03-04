@@ -17,16 +17,27 @@ const builder = {
       let isLastMethod = i => i === methods.length - 1;
       methods.forEach((method, index) => {
         if(method.dir){
-          jModifier[method.dir] = {};
-          this.fetchMethods(`${rootDir}/${method.dir}`).forEach(subMethod => {
+          let dir = method.dir;
+          if(!jModifier.hasOwnProperty(dir)) jModifier[dir] = {};
+          let subMethods = this.fetchMethods(`${rootDir}/${dir}`);
+          subMethods.forEach(subMethod => {
             let methodName = this.resolveName(subMethod.file);
-            this.readMethod(`${rootDir}/${method.dir}/${subMethod.file}`)
+            this.readMethod(`${rootDir}/${dir}/${subMethod.file}`)
               .then(({method}) => {
-                jModifier[method.dir][methodName] = this.readMethod();
+                jModifier[dir][methodName] = method;
                 if(isLastMethod(index)) resolve(jModifier);
               }).catch(reject)
             ;
           });
+          if(subMethods.length === 0){
+            (async function(){
+              jModifier[dir].empty = "no methods found in this directory";
+              if(isLastMethod(index)){
+                await Promise.resolve();
+                resolve(jModifier);
+              }
+            })();
+          }
         }else{
           let methodName = this.resolveName(method.file);
           this.readMethod(`${rootDir}/${method.file}`)
@@ -52,15 +63,11 @@ const builder = {
         delete require.cache[path];
         this.resolveMethod(require(path), path)
           .then(method => {
-            method = this.resolveMethod(require(path));
             this.methodsBundled++;
             resolve({method, stage: "readMethod"});
           }).catch(reject)
         ;
       }catch(e){
-        let pathSplit = path.split("/");
-        let methodPath = pathSplit.slice(pathSplit.length - 2, pathSplit.length).join("/");
-
         let stack = e.stack.toString();
         let synIndex = stack.indexOf("SyntaxError:");
         if(synIndex !== -1){
