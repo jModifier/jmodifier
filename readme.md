@@ -1,6 +1,8 @@
 
 
-# ![jModifier Logo](https://jcdn.io/jModifier-32.png) jModifier [Beta] 0.1.1
+# ![jModifier Logo](https://jcdn.io/jModifier-32.png) jModifier [Beta]
+
+Build Server Version: 0.1.2
 
 > Simple concepts, do more.
 

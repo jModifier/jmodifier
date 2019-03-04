@@ -1,6 +1,6 @@
 {
   "name": "jmodifier",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Utility library with a focus on object manipulation (BETA)",
   "main": "builds/_.js",
   "scripts": {
