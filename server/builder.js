@@ -2,6 +2,7 @@
 const path = require("path");
 const fs = require("fs");
 const shell = require("shelljs");
+const jsdoc = require("jsdoc-api");
 
 const beautify = require("js-beautify");
 const buble = require("buble");
@@ -11,91 +12,111 @@ const terser = require("terser");
 const builder = {
   bundle(rootDir){
     return new Promise((resolve, reject) => {
-      let jModifier = {};
-      this.methodsBundled = 0;
-      let methods = this.fetchMethods(rootDir);
-      let isLastMethod = i => i === methods.length - 1;
-      methods.forEach((method, index) => {
-        if(method.dir){
-          let dir = method.dir;
-          if(!jModifier.hasOwnProperty(dir)) jModifier[dir] = {};
-          let subMethods = this.fetchMethods(`${rootDir}/${dir}`);
-          subMethods.forEach(subMethod => {
-            let methodName = this.resolveName(subMethod.file);
-            this.readMethod(`${rootDir}/${dir}/${subMethod.file}`)
-              .then(({method}) => {
-                jModifier[dir][methodName] = method;
-                if(isLastMethod(index)) resolve(jModifier);
-              }).catch(reject)
-            ;
-          });
-          if(subMethods.length === 0){
-            (async function(){
-              jModifier[dir].empty = "no methods found in this directory";
-              if(isLastMethod(index)){
-                await Promise.resolve();
-                resolve(jModifier);
-              }
-            })();
-          }
-        }else{
-          let methodName = this.resolveName(method.file);
-          this.readMethod(`${rootDir}/${method.file}`)
-            .then(({method}) => {
-              jModifier[methodName] = method;
-              if(isLastMethod(index)) resolve(jModifier);
-            }).catch(reject)
-          ;
-        }
-      });
-    })
+      let methods = this.fetchMethodPaths(rootDir);
+      this.readMethods(methods).then(resolve).catch(reject);
+      this.methodsBundled = methods.length;
+    });
   },
-  fetchMethods(methodsPath){
-    return fs.readdirSync(methodsPath)
-      .map(item => {
-        return fs.lstatSync(`${methodsPath}/${item}`).isDirectory() ? {dir: item} : {file: item}
-      })
+  fetchMethodPaths(root){
+    return shell.ls("-R", root)
+      .filter(item => item.endsWith(".js"))
+      .map(item => `${root}/${item}`)
     ;
   },
-  readMethod(path){
-    return new Promise((resolve, reject) => {
-      try{
-        delete require.cache[path];
-        this.resolveMethod(require(path), path)
-          .then(method => {
-            this.methodsBundled++;
-            resolve({method, stage: "readMethod"});
-          }).catch(reject)
-        ;
-      }catch(e){
-        let stack = e.stack.toString();
-        let synIndex = stack.indexOf("SyntaxError:");
-        if(synIndex !== -1){
-          let firstLine = stack.split("\n")[0].split("/").slice(-2).join("/") + "\n\n";
-          let stackMessage = stack.split("\n").slice(1).join("\n").split(/\n.*at\s.*\(.*\)/)[0];
-          stack = firstLine + stackMessage;
-        }
-        let message = `\nfailed to bundle method..` + `\n\n${stack}\n`;
-        reject({message, stage: "readMethod"});
-      }
-    })
+  cleanStack(e){
+    let stack = e.stack.toString();
+    let synIndex = stack.indexOf("SyntaxError:");
+    let typIndex = stack.indexOf("TypeError:");
+    if(synIndex !== -1 || typIndex !== -1){
+      let firstLine = stack.split("\n")[0].split("/").slice(-2).join("/") + "\n\n";
+      let stackMessage = stack.split("\n").slice(1).join("\n").split(/\n.*at\s.*\(.*\)/)[0];
+      stack = firstLine + stackMessage;
+    }
+    return `\n\n${stack}\n`;
   },
-  resolveName: fileName => fileName.split(".").slice(0, -1).join("."),
-  resolveMethod: (method, path) => {
+  requireMethods(methodPaths){
     return new Promise((resolve, reject) => {
-      if(
-        method.label
-        && method.description
-        && method.method
-        && method.example
-      ){
-        resolve(method);
-      }else{
-        reject({
-          stage: "resolveMethod",
-          message: `jModifier method '${path.split("/").slice(-2).join("/")}' is not formatted correctly. Method must include a 'label', 'description', 'method', and 'example'.`
-        });
-      }
+      Promise.all(
+        methodPaths.map(path => {
+          try{
+            delete require.cache[path];
+            let method = require(path);
+            return {
+              path: builder.resolveDelPath(path),
+              method,
+              doc: jsdoc.explainSync({
+                files: path,
+                pedantic: true,
+                cache: true
+              })[0]
+            };
+          }catch(e){
+            reject({message: `Failed to require methods.. ${builder.cleanStack(e)}`, stage: "requireMethods"});
+          }
+        })
+      ).then(resolve).catch(reject);
+    });
+  },
+  resolveDelPath: path => "jModifier" + path.split("jModifier").reverse()[0].replace(/\//g, ".").slice(0, -3),
+  resolveMethods: methods => {
+    return new Promise((resolve, reject) => {
+      Promise.all(
+        methods.map(method => {
+          let doc = method.doc;
+          if(
+            doc
+            && doc.name
+            && doc.longname
+            && doc.longname === method.path
+            && doc.description
+            && doc.examples
+            && doc.examples.length > 0
+            && doc.returns
+            && doc.returns.length > 0
+          ){
+            method.doc = {
+              longname: doc.longname,
+              name: doc.name,
+              memberof: doc.memberof,
+              comment: doc.comment,
+              description: doc.description,
+              examples: doc.examples,
+              params: doc.params,
+              returns: doc.returns
+            };
+            method.name = doc.longname;
+            return method;
+          }else{
+            reject({
+              stage: "resolveMethod",
+              message: `Failed to resolve methods.\n`
+                      +`Method: ${method.path} (incorrectly formatted with jsdoc)\n\n`
+                      +`Example format:\n`
+                      +"\x1b[32m"
+                      +`/**\n`
+                      +`* @name jModifier.ping\n`
+                      +`* @description dummy function\n`
+                      +`* @param {any} ping - Sent it anything!\n`
+                      +`* @example jModifier.ping("Pong!")\n`
+                      +`* @returns {any} Returns what you send it\n`
+                      +`*/\n`
+                      +`module.exports = function(ping){\n  return ping;\n};`
+                      +"\x1b[0m\x1b[33m\n"
+                      +`Note: The @name MUST represent the method file location.`
+                      +`\n`
+            });
+          }
+        })
+      ).then(resolve).catch(reject);
+    });
+  },
+  readMethods(methodPaths){
+    return new Promise((resolve, reject) => {
+      builder.requireMethods(methodPaths)
+        .then(builder.resolveMethods)
+        .then(methods => resolve(methods))
+        .catch(reject);
+      ;
     });
   },
   stringifyObject(targetObject, hash){
@@ -129,55 +150,77 @@ const builder = {
     let openIndex = methodStr.indexOf("(");
     return newName + methodStr.substring(openIndex);
   },
-  mapMethods(bundle, replacer){
-    let newBundle = {};
-    for(let method in bundle){
-      let bundleMethod = bundle[method];
-      if(bundleMethod){
-        if(bundleMethod.method){
-          newBundle[method] = replacer(method, bundleMethod);
-        }else if(bundleMethod.constructor === Object){
-          newBundle[method] = builder.mapMethods(bundleMethod, replacer);
-        }
-      }else{
-        newBundle[method] = bundleMethod;
-      }
+  setPath(object, path, value){
+    let keys = path.split(".");
+    let top = keys.length - 1;
+    let position = object;
+    for(let i = 0; i < top; i++){
+        let key = keys[i];
+        position = position[key] || (position[key] = {});
     }
-    return newBundle;
+    position[keys[top]] = value;
+    return object;
+  },
+  constructCore(bundle){
+    let jModifier = {};
+    bundle.forEach(method => {
+      let path = method.path
+        .split(".").reverse()
+        .slice(0, -1).reverse()
+        .join(".")
+      ;
+      let targetMethod = method.method[Object.keys(method.method)[0]];
+      builder.setPath(jModifier, path + "_jsdoc", "ffade996325fdbdad3036bca527f15d3");
+      builder.setPath(jModifier, path, targetMethod);
+    });
+    let comments = bundle.map(method => method.comment);
+    let stringified = builder.stringifyObject(jModifier)
+      .replace(
+        /"\w+?_jsdoc":"ffade996325fdbdad3036bca527f15d3",/g,
+        () => {
+          let jsdoc = comments[0];
+          comments.shift();
+          return jsdoc;
+        }
+      )
+    ;
+    return stringified;
   },
   builds: {
     index(bundle){
-      return builder.package(bundle, {b: true}, "index");
+      return builder.package(builder.stringifyObject(bundle), {b: true}, "index");
     },
     core(bundle, mint){
-      let mappedBundle = builder.mapMethods(bundle, (key, method) => {
-        let targetMethod = method.method;
-        if(builder.isShortMethod(targetMethod)){
-          targetMethod = `convert:${builder.renameMethod(targetMethod, key)}`
-        }
-        return targetMethod;
+      let mappedBundle = bundle.map(method => {
+        let key = method.path.split(".").reverse()[0];
+        return {
+          comment: method.doc.comment,
+          method: {[key]: builder.isShortMethod(method.method) ? (
+            `convert:${builder.renameMethod(method.method, key)}`
+          ) : method.method},
+          path: method.path
+        };
       });
-      return mint ? mappedBundle : builder.package(mappedBundle, {b: true}, "core");
-    },
-    debug(bundle){
-      let mappedBundle = builder.mapMethods(bundle, (key, method) => {
-        let targetMethod = method.method;
-        let isShortMethod = builder.isShortMethod(targetMethod);
-        if(isShortMethod) targetMethod = builder.renameMethod(targetMethod, key);
-        targetMethod = targetMethod.constructor === String ? targetMethod : targetMethod.toString();
-        return `convert:${key}(){
-          return arguments.length === 0 ? "${method.label} - ${method.description}" : (
-            ({${
-              isShortMethod ? targetMethod : `${key}: ${targetMethod}`
-            }})["${key}"].apply(this, arguments)
-          )
-        }`;
-      });
-      return builder.package(mappedBundle, {b: true}, "debug");
+      let constructed = builder.constructCore(mappedBundle);
+      return mint ? constructed : builder.package(constructed, {b: true}, "core");
     },
     mint(bundle){
-      return builder.package(builder.builds.core(bundle, true), {t: true, m: true}, "mint");
+      return builder.package(builder.builds.core(bundle, true), {m: true}, "mint");
+    },
+    readme(bundle){
+      return "# jModifier API";
     }
+  },
+  package(bundle, {b, t, m}, buildName){
+    let package = `
+      (function(client, ${buildName}){
+        client ? window.jModifier = ${buildName} : module.exports = ${buildName};
+      })(!!!!!!!!!!!/* jModifier */!!!!!!!!!!!!(typeof exports === "object"), ${bundle});
+    `;
+    if(t) package = buble.transform(package).code;
+    if(b) package = beautify(package, {indent_size: 2});
+    if(m) package = terser.minify(package).code;
+    return package;
   },
   buildAll(sourcePath, buildPath){
     return new Promise((resolve, reject) => {
@@ -188,9 +231,9 @@ const builder = {
       };
       builder.bundle(paths.source).then(bundle => {
         timeline.add(`${builder.methodsBundled} method${builder.methodsBundled > 1 ? "s" : ""} bundled`).add("Building files..");
-        builder.writeBuilds(path.normalize(`${__dirname}/${buildPath}`), bundle);
+        builder.writeBuilds(paths.build, bundle);
         resolve({stage: "build", message: timeline.add("Build complete").log()});
-      }).catch(err => reject(err));
+      }).catch(reject);
     });
   },
   writeBuilds(dir, bundle){
@@ -199,7 +242,7 @@ const builder = {
     let buildFiles = [];
     buildKeys.forEach(buildKey => {
       let build = builder.builds[buildKey];
-      let buildFileName = `./jModifier-${buildKey}.js`;
+      let buildFileName = buildKey === "readme" ? "readme.md" : `./jModifier-${buildKey}.js`;
       buildFiles.push({filename: buildFileName, key: buildKey});
       fs.writeFile(dir + "/" + buildFileName, build(bundle), err => {
         if(err){
@@ -216,18 +259,6 @@ const builder = {
     `, {indent_size: 2}), err => {
       if(err) console.error("\x1b[33m%s\x1b[0m", `jModifier: error creating _.js build file \n\n${err.stack}\n`);
     });
-  },
-  package(bundle, {b, t, m}, buildName){
-    let stringified = builder.stringifyObject(bundle);
-    let package = `
-      (function(client, ${buildName}){
-        client ? window.jModifier = ${buildName} : module.exports = ${buildName};
-      })(!!!!!!!!!!!/* jModifier */!!!!!!!!!!!!(typeof exports === "object"), ${stringified});
-    `;
-    if(t) package = buble.transform(package).code;
-    if(b) package = beautify(package, {indent_size: 2});
-    if(m) package = terser.minify(package).code;
-    return package;
   },
   Timeline: function(timelineLabel){
     this.times = [];

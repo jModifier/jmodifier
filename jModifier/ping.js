@@ -1,9 +1,10 @@
-
-module.exports = {
-  label: "jModifier.ping()",
-  description: "a dummy function",
-  method: () => "Pong!",
-  example(){
-    jModifier.ping(); // Pong!
-  }
-}
+/**
+* @name jModifier.ping
+* @description dummy function
+* @param {any} ping - Sent it anything!
+* @example jModifier.ping("Pong!")
+* @returns {any} Returns what you send it
+*/
+module.exports = function(ping){
+  return ping;
+};

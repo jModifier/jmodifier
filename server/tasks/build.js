@@ -15,5 +15,5 @@ shell.ls("server/defaults").forEach(filename => {
 builder.buildAll("../jModifier", "../public/builds").then(build => {
   console.log("\x1b[36m%s\x1b[0m", build.message);
 }).catch(err => {
-  console.log("\x1b[33m%s\x1b[0m", err.message);
+  console.log("\x1b[33m%s\x1b[0m", err.stack ? builder.cleanStack(err) : err.message);
 });
