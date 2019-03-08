@@ -48,7 +48,7 @@ const builder = {
                 files: path,
                 pedantic: true,
                 cache: true
-              })[0]
+              })
             };
           }catch(e){
             reject({message: `Failed to require methods.. ${builder.cleanStack(e)}`, stage: "requireMethods"});
@@ -62,40 +62,31 @@ const builder = {
     return new Promise((resolve, reject) => {
       Promise.all(
         methods.map(method => {
-          let doc = method.doc;
+          let doc = method.doc[0];
           if(
             doc
             && doc.name
             && doc.longname
             && doc.longname === method.path
             && doc.description
-            && doc.examples
-            && doc.examples.length > 0
+            && doc.author
             && doc.returns
             && doc.returns.length > 0
           ){
-            method.doc = {
-              longname: doc.longname,
-              name: doc.name,
-              memberof: doc.memberof,
-              comment: doc.comment,
-              description: doc.description,
-              examples: doc.examples,
-              params: doc.params,
-              returns: doc.returns
-            };
             method.name = doc.longname;
             return method;
           }else{
             reject({
               stage: "resolveMethod",
               message: `Failed to resolve methods.\n`
-                      +`Method: ${method.path} (incorrectly formatted with jsdoc)\n\n`
+                      +`Method '${method.path}' is incorrectly formatted with jsdoc.\n\n`
                       +`Example format:\n`
                       +"\x1b[32m"
                       +`/**\n`
                       +`* @name jModifier.ping\n`
                       +`* @description dummy function\n`
+                      +`* @author YourGitHubUsername\n`
+                      +`* @author 2ndContributorUsername\n`
                       +`* @param {any} ping - Sent it anything!\n`
                       +`* @example jModifier.ping("Pong!")\n`
                       +`* @returns {any} Returns what you send it\n`
@@ -114,7 +105,7 @@ const builder = {
     return new Promise((resolve, reject) => {
       builder.requireMethods(methodPaths)
         .then(builder.resolveMethods)
-        .then(methods => resolve(methods))
+        .then(methods => resolve(methods.reverse()))
         .catch(reject);
       ;
     });
@@ -186,18 +177,289 @@ const builder = {
     ;
     return stringified;
   },
+  resolveMethodType(method, key){
+    return {[key]: builder.isShortMethod(method) ? (
+      `convert:${builder.renameMethod(method, key)}`
+    ) : method};
+  },
+  captionReg: /<caption>(.+?)<\/caption>/g,
+  resolveExample(exampleComment){
+    return {
+      examples: exampleComment.examples.map(example => {
+        builder.captionReg.lastIndex = 0;
+        let match = builder.captionReg.exec(example);
+        let caption = match ? match[1] : "";
+        return {
+          source: caption ? example.substring(caption.length + 19, example.length) : exampleComment,
+          caption: caption || "",
+        }
+      }),
+      returns: (exampleComment.returns ? exampleComment.returns.map(ret => ret.description) : ""),
+      description: exampleComment.description
+    };
+  },
+  docs: {
+    Method: class{
+
+      constructor({
+        method,
+        methodPath = "",
+        description = "",
+        authors = [],
+        params = [],
+        callbacks = [],
+        returns = [],
+        examples = []
+      }){
+
+        this.method = method;
+        this.methodPath = methodPath;
+        this.description = description;
+        this.authors = authors;
+        this.returns = returns;
+        this.params = params;
+        this.callbacks = callbacks;
+        this.examples = examples;
+
+        this.header = "." + methodPath.split(".").slice(1).join(".");
+        this.headerLink = `#${this.header.replace(".", "")}`;
+        this.methodFilePath = this.methodPath.replace(".", "/") + ".js";
+        this.paramNames = this.resolveParamNames(this.params);
+        this.hasOptionalParam = this.paramNames.filter(name => name.endsWith("*>")).length > 0;
+        this.headerString = `\n## \`${this.header}\``;
+        this.methodString = `\`jModifier${this.header}(${this.paramNames.join(", ")})\``;
+        this.methodString += this.hasOptionalParam ? ` <code>* = optional</code>` : "";
+      }
+
+      doc(){
+        return ([
+          "<br>"                  ,
+          this.headerString       ,,
+          "> <OBJECT>"            ,
+            this.description      ,,
+            this.methodString     ,,
+            this.docReturns()     ,
+            this.docParams()      ,,
+          "> </OBJECT>"           ,,
+          this.docExamples()      ,,
+          this.docSource()        ,,
+          "\n---"                 ,
+          "<br>"                  ,,
+        ]).join("\n");
+      }
+
+      resolveParamNames(params){
+        return params
+          .filter(param => param.name.indexOf(".") === -1)
+          .map(param => param.optional ? `<${param.name}*>` : `<${param.name}>`)
+        ;
+      }
+
+      docReturns(){
+        return "**Returns:**\n" + this.returns.map(methodReturn => {
+          let types = methodReturn[0].map(type => `\`${type}\``).join(",");
+          let description = methodReturn[1];
+          return `- ${types} - ${description}`;
+        }).join("\n")
+      }
+
+      docParams(){
+        return ([
+          "<table>",
+            "<thead>",
+              "<tr>",
+                "<th>", "Parameter", "</th>",
+                "<th>", "Type", "</th>",
+                "<th>", "Description", "</th>",
+                "<th>", "Default", "</th>",
+              "</tr>",
+            "</thead>",
+            "<tbody>",
+              this.params.map(param => {
+                return ([
+                  "<tr>",
+                    `<td><code>&lt;${param.name}${param.optional ? "*" : ""}&gt;</code></td>`,
+                    `<td><code>${param.types.join(",")}</code></td>`,
+                    `<td>${param.description}</td>`,
+                    `<td><code>${param.defaultValue}</code></td>`,
+                  "</tr>",
+                  this.docCallbacks(param)
+                ]).join("")
+              }).join(""),
+            "</tbody>",
+          "</table>"
+        ]).join("")
+      }
+
+      docCallbacks(param){
+        return this.callbacks.filter(callback => param.name === callback.name)
+          .map(callback => {
+            return ([
+              "<tr><td colspan=4><table>",
+                `<code>function ${callback.name}(${callback.params.filter(param => param.name.indexOf(".") === -1).map(param => param.name).join(", ")}){ ... }</code>`,
+                "<thead>",
+                  "<th>Argument</td>",
+                  "<th>Type</td>",
+                  "<th>Description</td>",
+                "</thead>",
+                "<tbody>",
+                  callback.params.map(arg => {
+                    return ([
+                      "<tr>",
+                        `<td><code>${arg.name}</code></td>`,
+                        `<td>${arg.types.map(type => `<code>${type}</code>`).join()}</td>`,
+                        `<td>${arg.description}</td>`,
+                      "</tr>"
+                    ]).join("")
+                  }),
+                "</tbody>",
+              "</table></td></tr>"
+            ]).join("")
+          })
+      }
+
+      docExamples(){
+        return this.examples.length > 0 ? "\n### Examples: \n" + ([
+          "<table><tbody><tr></tr>",
+              this.examples.map(example => {
+                let examples = example.examples;
+                return ([
+                  "<tr><td>",
+                  (examples && examples.length > 0) ? (
+                    examples.map(ee => {
+                      return ([
+                          `\n<p></p><code>${ee.caption}</code>`,
+                          `\n${ee.source}\n`,
+                      ]).join("")
+                    }).join("")
+                  ) : "",
+                  "</tr></td>",
+                  (example.returns && example.returns.length > 0) ? (
+                    "<tr><td><code><small>OUTPUT</small></code><b>\n\n```js\n" +
+                    example.returns.map(methodReturn => {
+                      return ([
+                        `${methodReturn}\n`
+                      ]).join("")
+                    }).join("")
+                    + "```\n</b></td></tr>"
+                  ) : "",
+                ]).join("")
+              }).join(""),
+          "</tbody></table>"
+        ]).join("") : ""
+      }
+
+      docSource(){
+        return ([
+          "<details>",
+            `<summary>source</summary>\n\n`,
+            `<br><small>**Authors of** <code>${this.methodFilePath}</code></small>`,
+            "<pre>",
+              this.authors.map(author => {
+                return ([
+                  `<a href="https://www.github.com/${author}" title="${author}">`,
+                    `<img src="https://www.github.com/${author}.png" alt="${author}" width=48>`,
+                  "</a>"
+                ]).join("")
+              }).join(""),
+            "</pre>",
+            "\n\n<p></p>",
+            `<a href="https://github.com/jModifier/jModifier/blob/master/${this.methodFilePath}">`,
+              `<code>${this.methodFilePath}</code>`,
+            "</a>\n\n",
+            "\n```js\n",
+              beautify(
+                `moule.exports = ${this.method.toString()};`,
+                {indent_size: 2}
+              ),
+            "\n```\n",
+          "</details>"
+        ]).join("")
+      }
+
+    },
+
+    createTOC(methods){
+      return ([
+        "<table>",
+          "<thead>",
+            "<tr>",
+              "<td>Method</td>",
+              "<td>Link</td>",
+              "<td>Description</td>",
+            "</tr>",
+          "</thead>",
+          "<tbody>",
+            methods.map(method => {
+              return ([
+                "<tr>",
+                  `<td><code>${method.header}</code></td>`,
+                  `<td><a href="${method.headerLink}">${method.headerLink}</a></td>`,
+                  `<td>${method.description}</td>`,
+                "</tr>"
+              ]).join("")
+            }).join(""),
+          "</tbody>",
+        "</table>"
+      ]).join("\n");
+    }
+
+  },
+  mapParam: param => ({
+    optional: param.optional,
+    defaultValue: param.defaultvalue,
+    description: param.description,
+    name: param.name,
+    types: param.type.names
+  }),
+  resolveDocMethods(bundle){
+    return bundle.map(method => {
+      let mainDoc = method.doc[0];
+      return new builder.docs.Method({
+        method: method.method,
+        methodPath: method.path,
+        description: mainDoc.description,
+        authors: mainDoc.author,
+        params: mainDoc.params.map(param => builder.mapParam(param)),
+        returns: mainDoc.returns ? (
+          mainDoc.returns.map(methodReturn => {
+            return (methodReturn.type && methodReturn.type.names && methodReturn.description) ? (
+              [methodReturn.type.names, methodReturn.description]
+            ) : []
+          })
+        ) : [],
+        callbacks: method.doc.filter(doc => doc.kind === "typedef")
+          .map(callback => ({
+              name: callback.name,
+              params: callback.params.map(param => builder.mapParam(param))
+          })),
+        examples: method.doc.filter(doc => {
+          return doc.kind === "function" && (doc.examples && doc.examples.length > 0);
+        }).map(doc => ([{
+          examples: doc.examples.map(example => {
+            builder.captionReg.lastIndex = 0;
+            let match = builder.captionReg.exec(example);
+            let caption = match ? match[1] : "";
+            return {
+              source: caption ? example.substring(caption.length + 19, example.length) : example,
+              caption: caption || "",
+            }
+          }),
+          returns: (doc.returns ? doc.returns.map(docReturn => docReturn.description) : "")
+        }]))[0]
+      });
+    })
+  },
   builds: {
     index(bundle){
-      return builder.package(builder.stringifyObject(bundle), {b: true}, "index");
+      return builder.package(builder.stringifyObject(builder.resolveDocMethods(bundle)), {b: true}, "index");
     },
     core(bundle, mint){
       let mappedBundle = bundle.map(method => {
         let key = method.path.split(".").reverse()[0];
         return {
-          comment: method.doc.comment,
-          method: {[key]: builder.isShortMethod(method.method) ? (
-            `convert:${builder.renameMethod(method.method, key)}`
-          ) : method.method},
+          comment: method.doc.map(doc => doc.comment).join("\n"),
+          method: builder.resolveMethodType(method.method, key),
           path: method.path
         };
       });
@@ -205,10 +467,22 @@ const builder = {
       return mint ? constructed : builder.package(constructed, {b: true}, "core");
     },
     mint(bundle){
-      return builder.package(builder.builds.core(bundle, true), {m: true}, "mint");
+      return builder.package(builder.builds.core(bundle, true), {m: true, t: true}, "mint");
     },
     readme(bundle){
-      return "# jModifier API";
+      let doc = "";
+
+      let docMethods = builder.resolveDocMethods(bundle);
+      let toc = builder.docs.createTOC(docMethods);
+
+      doc += ([
+        "The following documentation is automatically generated. ",
+        "Please refer to the development repository ([jModifier/jModifier](https://github.com/jModifier/jModifier)) for information on what jModifier is and how to contribute."
+      ]).join("");
+      doc += "<br><br>\n# CONTENTS\n\n<br>" + toc + "\n\n";
+      doc += "<br><br>\n# API \n\n" + docMethods.map(method => method.doc()).join("\n");
+
+      return doc;
     }
   },
   package(bundle, {b, t, m}, buildName){

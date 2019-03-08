@@ -1,10 +1,15 @@
 /**
 * @name jModifier.ping
 * @description dummy function
-* @param {any} ping - Sent it anything!
-* @example jModifier.ping("Pong!")
+* @param {any} ping - Send it anything!
 * @returns {any} Returns what you send it
+* @author JeremyJaydan
 */
-module.exports = function(ping){
-  return ping;
-};
+/**
+* @example <caption>Return "hello, world"</caption>
+* ```js
+* jModifier.ping("hello, world");
+* ```
+* @returns "hello, world"
+*/
+module.exports = ping => ping;
