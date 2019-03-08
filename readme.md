@@ -32,7 +32,7 @@ Contribution docs are in the works, join the [**jModifier Discord server**](http
 Otherwise if you're feeling lucky, clone & start the build server:
 ```shell
 git clone https://github.com/jModifier/jModifier.git .
-npm i && npm start
+npm i && npm run start
 ```
 
 The jModifier build server has sufficient error handling & informational messages in the terminal that should make it easy for you to contribute.

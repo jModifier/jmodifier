@@ -380,28 +380,7 @@ const builder = {
     },
 
     createTOC(methods){
-      return ([
-        "<table>",
-          "<thead>",
-            "<tr>",
-              "<td>Method</td>",
-              "<td>Link</td>",
-              "<td>Description</td>",
-            "</tr>",
-          "</thead>",
-          "<tbody>",
-            methods.map(method => {
-              return ([
-                "<tr>",
-                  `<td><code>${method.header}</code></td>`,
-                  `<td><a href="${method.headerLink}">${method.headerLink}</a></td>`,
-                  `<td>${method.description}</td>`,
-                "</tr>"
-              ]).join("")
-            }).join(""),
-          "</tbody>",
-        "</table>"
-      ]).join("\n");
+      return methods.map(method => `\n\n- [${method.methodString}](${method.headerLink}) - ${method.description}`).join("")
     }
 
   },
