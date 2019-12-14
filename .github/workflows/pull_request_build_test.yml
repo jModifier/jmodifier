@@ -1,14 +1,10 @@
-name: CI
-
-on: [push]
-
+name: PR Build Test
+on: pull_request
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
-    - name: Test
+    - name: Build Test
       run: |
         git clone https://github.com/JeremyJaydan/jModifier .
-        node ./test.js
+        node ./.build/test.js
