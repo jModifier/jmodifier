@@ -1,12 +1,9 @@
 {
   "name": "jmodifier",
-  "version": "0.1.2",
-  "description": "Utility library with a focus on object manipulation (BETA)",
-  "main": "builds/_.js",
-  "scripts": {
-    "start": "node server/tasks/server",
-    "build": "node server/tasks/build"
-  },
+  "version": "1.0.0",
+  "description": "U",
+  "main": "index.js",
+  "scripts": { },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/JeremyJaydan/jModifier.git"
@@ -16,14 +13,5 @@
   "bugs": {
     "url": "https://github.com/JeremyJaydan/jModifier/issues"
   },
-  "homepage": "https://github.com/JeremyJaydan/jModifier#readme",
-  "devDependencies": {
-    "buble": "^0.19.6",
-    "chokidar": "^2.1.2",
-    "express": "^4.16.4",
-    "js-beautify": "^1.8.9",
-    "jsdoc-api": "^4.0.3",
-    "shelljs": "^0.8.3",
-    "terser": "^3.16.1"
-  }
+  "homepage": "https://github.com/JeremyJaydan/jModifier#readme"
 }
